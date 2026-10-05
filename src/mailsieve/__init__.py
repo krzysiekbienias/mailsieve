@@ -1,11 +1,15 @@
 from mailsieve.config import ConfigError, Settings
+from mailsieve.imap_client import ImapClient, MailboxError
 
 
 def main() -> None:
     try:
         settings = Settings.from_env()
-    except ConfigError as exc:
-        raise SystemExit(f"Configuration error: {exc}") from None
+        with ImapClient(settings) as client:
+            count = client.select_mailbox("INBOX")
+    except (ConfigError, MailboxError) as exc:
+        raise SystemExit(f"Error: {exc}") from None
 
-    print(f"Config loaded for {settings.gmail_address}")
-    print(f"Password: {settings.gmail_app_password}")
+    print(
+        f"Connected as {settings.gmail_address}: INBOX has {count} messages (read-only)"
+    )
