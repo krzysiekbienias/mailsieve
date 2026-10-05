@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import imaplib
+from collections.abc import Iterator
+from itertools import batched
 from types import TracebackType
 from typing import Self
 
 from mailsieve.config import Settings
+from mailsieve.domain import Sender
+from mailsieve.headers import parse_sender
 
 
 class MailboxError(Exception):
@@ -50,6 +54,35 @@ class ImapClient:
         if status != "OK":
             raise MailboxError(f"Cannot open mailbox {mailbox!r}: {data}")
         return int(data[0])
+
+    def fetch_uids(self) -> list[bytes]:
+        status, data = self._require_conn().uid("SEARCH", None, "ALL")
+        if status != "OK":
+            raise MailboxError(f"UID search failed: {data}")
+        return data[0].split()
+
+    def iter_senders(
+        self, batch_size: int = 500, limit: int | None = None
+    ) -> Iterator[Sender]:
+        uids = self.fetch_uids()
+        if limit is not None:
+            uids = uids[-limit:]
+
+        for batch in batched(uids, batch_size):
+            uid_set = b",".join(batch).decode()
+            status, data = self._require_conn().uid(
+                "FETCH", uid_set, "(BODY.PEEK[HEADER.FIELDS (FROM)])"
+            )
+            if status != "OK":
+                raise MailboxError(
+                    f"Fetch failed for batch starting at UID {batch[0]!r}"
+                )
+
+            for item in data:
+                if isinstance(item, tuple):
+                    sender = parse_sender(item[1])
+                    if sender is not None:
+                        yield sender
 
     def close(self) -> None:
         if self._conn is None:
