@@ -1,7 +1,7 @@
 [project]
 name = "mailsieve"
 version = "0.1.0"
-description = "Add your description here"
+description = "Gmail inbox analysis and cleanup with LLM-assisted classification"
 readme = "README.md"
 authors = [
     { name = "Krzysiek Bienias", email = "38161311+krzysiekbienias@users.noreply.github.com" }
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mailsieve = "mailsieve:main"
+mailsieve = "mailsieve.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.29,<0.12.0"]
