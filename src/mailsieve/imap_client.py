@@ -7,8 +7,8 @@ from types import TracebackType
 from typing import Self
 
 from mailsieve.config import Settings
-from mailsieve.domain import Sender
-from mailsieve.headers import parse_sender
+from mailsieve.domain import MessageInfo, Sender
+from mailsieve.headers import parse_message
 
 
 class MailboxError(Exception):
@@ -16,6 +16,8 @@ class MailboxError(Exception):
 
 
 class ImapClient:
+    HEADER_FIELDS = "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT)])"
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._conn: imaplib.IMAP4_SSL | None = None
@@ -61,9 +63,9 @@ class ImapClient:
             raise MailboxError(f"UID search failed: {data}")
         return data[0].split()
 
-    def iter_senders(
+    def iter_messages(
         self, batch_size: int = 500, limit: int | None = None
-    ) -> Iterator[Sender]:
+    ) -> Iterator[MessageInfo]:
         uids = self.fetch_uids()
         if limit is not None:
             uids = uids[-limit:]
@@ -71,7 +73,7 @@ class ImapClient:
         for batch in batched(uids, batch_size):
             uid_set = b",".join(batch).decode()
             status, data = self._require_conn().uid(
-                "FETCH", uid_set, "(BODY.PEEK[HEADER.FIELDS (FROM)])"
+                "FETCH", uid_set, self.HEADER_FIELDS
             )
             if status != "OK":
                 raise MailboxError(
@@ -80,9 +82,15 @@ class ImapClient:
 
             for item in data:
                 if isinstance(item, tuple):
-                    sender = parse_sender(item[1])
-                    if sender is not None:
-                        yield sender
+                    message = parse_message(item[1])
+                    if message is not None:
+                        yield message
+
+    def iter_senders(
+        self, batch_size: int = 500, limit: int | None = None
+    ) -> Iterator[Sender]:
+        for message in self.iter_messages(batch_size=batch_size, limit=limit):
+            yield message.sender
 
     def close(self) -> None:
         if self._conn is None:
